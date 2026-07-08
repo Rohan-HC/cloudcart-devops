@@ -1,0 +1,16 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+  datasource:
+    url: jdbc:h2:mem:cloudcart;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+
+app:
+  jwt:
+    secret: "cloudcart-cloudcart-cloudcart-cloudcart-cloudcart-123456"
+    expiration-minutes: 60

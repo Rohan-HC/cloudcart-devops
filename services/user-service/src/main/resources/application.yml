@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cloudcart
+    username: cloudcart
+    password: cloudcart
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  jwt:
+    secret: "cloudcart-cloudcart-cloudcart-cloudcart-cloudcart-123456"
+    expiration-minutes: 60
+
+server:
+  port: 8081
