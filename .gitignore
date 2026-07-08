@@ -1,0 +1,25 @@
+# Java / Spring Boot
+target/
+*.class
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# Logs
+*.log
+
+# Environment variables / secrets
+.env
+*.env
+application-secret.properties
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker temporary files
+*.pid
