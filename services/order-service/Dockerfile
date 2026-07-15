@@ -12,5 +12,5 @@ COPY --from=build /workspace/target/order-service-1.0.0.jar /app/app.jar
 
 USER 10001:10001
 
-EXPOSE 8084
+EXPOSE 8083
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
