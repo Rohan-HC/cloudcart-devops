@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: cloudcart
+  labels:
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/part-of: cloudcart
+data:
+  DB_URL: jdbc:postgresql://user-db:5432/cloudcart
+  DB_USERNAME: cloudcart
+  JWT_EXPIRATION_MINUTES: "60"
+  JPA_DDL_AUTO: update
+  SERVER_PORT: "8081"
