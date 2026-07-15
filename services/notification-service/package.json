@@ -1,0 +1,17 @@
+{
+  "name": "@cloudcart/notification-service",
+  "version": "1.0.0",
+  "description": "CloudCart notification service",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
