@@ -1,17 +1,20 @@
 spring:
   application:
     name: order-service
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/cloudcart_orders
-    username: cloudcart
-    password: cloudcart
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cloudcart_orders}
+    username: ${DB_USERNAME:cloudcart}
+    password: ${DB_PASSWORD:cloudcart}
+
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${JPA_DDL_AUTO:update}
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
+
   jackson:
     serialization:
       write-dates-as-timestamps: false
@@ -28,7 +31,7 @@ management:
 
 app:
   product-service:
-    base-url: http://localhost:8082
+    base-url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
 
 server:
-  port: 8083
+  port: ${SERVER_PORT:8083}
