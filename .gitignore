@@ -26,3 +26,8 @@ Thumbs.db
 
 # Docker temporary files
 *.pid
+
+# Local secrets
+.env
+.env.*
+!.env.example
