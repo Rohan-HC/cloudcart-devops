@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.2</version>
-        <relativePath/>
-    </parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.14</version>
+    <relativePath/>
+</parent>
 
     <groupId>com.cloudcart</groupId>
     <artifactId>product-service</artifactId>
@@ -18,8 +18,12 @@
     <description>CloudCart product service</description>
 
     <properties>
-        <java.version>21</java.version>
-    </properties>
+    <java.version>21</java.version>
+
+    <tomcat.version>10.1.57</tomcat.version>
+    <jackson-bom.version>2.21.4</jackson-bom.version>
+    <postgresql.version>42.7.11</postgresql.version>
+</properties>
 
     <dependencies>
         <dependency>
