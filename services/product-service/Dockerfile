@@ -5,13 +5,11 @@ RUN mvn -B -ntp dependency:go-offline
 COPY src ./src
 RUN mvn -B -ntp clean package
 
-FROM eclipse-temurin:21-jre AS runtime
+FROM gcr.io/distroless/java21-debian13:nonroot AS runtime
 WORKDIR /app
 
 # copy the built jar from the build stage
 COPY --from=build /workspace/target/product-service-1.0.0.jar /app/app.jar
-
-USER 10001:10001
 
 EXPOSE 8083
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
