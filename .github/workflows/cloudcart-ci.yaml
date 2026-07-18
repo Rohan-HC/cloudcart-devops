@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - main
+      - devops/kubernetes-local
 
   workflow_dispatch:
 
