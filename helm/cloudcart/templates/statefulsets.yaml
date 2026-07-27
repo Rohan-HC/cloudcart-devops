@@ -1,0 +1,88 @@
+﻿{{- $root := . }}
+{{- range $name, $database := .Values.databases }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "cloudcart.namespace" $root }}
+  labels:
+    {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: {{ $database.replicas }}
+  selector:
+    matchLabels:
+      {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: {{ $root.Values.postgres.terminationGracePeriodSeconds }}
+      {{- if not $root.Values.postgres.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+      containers:
+        - name: postgres
+          image: "{{ $root.Values.postgres.image.repository }}:{{ $root.Values.postgres.image.tag }}"
+          imagePullPolicy: {{ $root.Values.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: {{ $root.Values.postgres.port }}
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: {{ $database.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ $database.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $database.secretName }}
+                  key: {{ $database.secretKey }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: {{ $root.Values.postgres.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $root.Values.postgres.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ $root.Values.postgres.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ $root.Values.postgres.readinessProbe.failureThreshold }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: {{ $root.Values.postgres.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $root.Values.postgres.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ $root.Values.postgres.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ $root.Values.postgres.livenessProbe.failureThreshold }}
+          resources:
+            {{- toYaml $root.Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  {{- if $root.Values.postgres.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - {{ $root.Values.postgres.persistence.accessMode }}
+        {{- with $root.Values.postgres.persistence.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $root.Values.postgres.persistence.size }}
+  {{- else }}
+  {{- end }}
+{{- end }}

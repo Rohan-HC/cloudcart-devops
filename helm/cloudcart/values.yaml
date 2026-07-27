@@ -1,0 +1,291 @@
+global:
+  namespace: cloudcart
+
+namespace:
+  create: true
+
+nameOverride: ""
+fullnameOverride: ""
+
+applications:
+  user-service:
+    replicas: 1
+    image:
+      repository: cloudcart-user-service
+      tag: "1.0.0"
+      pullPolicy: IfNotPresent
+    port: 8081
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    healthPath: /actuator/health
+    startupProbe:
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 30
+    readinessProbe:
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    livenessProbe:
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    config:
+      DB_URL: jdbc:postgresql://user-db:5432/cloudcart
+      DB_USERNAME: cloudcart
+      JWT_EXPIRATION_MINUTES: "60"
+      JPA_DDL_AUTO: update
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+      SERVER_PORT: "8081"
+    secretEnv:
+      DB_PASSWORD:
+        secretName: user-service-secret
+        key: DB_PASSWORD
+      JWT_SECRET:
+        secretName: user-service-secret
+        key: JWT_SECRET
+    resources:
+      requests:
+        cpu: 150m
+        memory: 256Mi
+      limits:
+        cpu: 750m
+        memory: 512Mi
+
+  product-service:
+    replicas: 1
+    image:
+      repository: cloudcart-product-service
+      tag: "1.0.0"
+      pullPolicy: IfNotPresent
+    port: 8082
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    healthPath: /actuator/health
+    startupProbe:
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 30
+    readinessProbe:
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    livenessProbe:
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    config:
+      DB_URL: jdbc:postgresql://product-db:5432/cloudcart_products
+      DB_USERNAME: cloudcart
+      JPA_DDL_AUTO: update
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+      SERVER_PORT: "8082"
+    secretEnv:
+      DB_PASSWORD:
+        secretName: product-service-secret
+        key: DB_PASSWORD
+    resources:
+      requests:
+        cpu: 150m
+        memory: 256Mi
+      limits:
+        cpu: 750m
+        memory: 512Mi
+
+  order-service:
+    replicas: 1
+    image:
+      repository: cloudcart-order-service
+      tag: "1.0.0"
+      pullPolicy: IfNotPresent
+    port: 8083
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    healthPath: /actuator/health
+    startupProbe:
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 30
+    readinessProbe:
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    livenessProbe:
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    config:
+      DB_URL: jdbc:postgresql://order-db:5432/cloudcart_orders
+      DB_USERNAME: cloudcart
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      JPA_DDL_AUTO: update
+      MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
+      SERVER_PORT: "8083"
+    secretEnv:
+      DB_PASSWORD:
+        secretName: order-service-secret
+        key: DB_PASSWORD
+    resources:
+      requests:
+        cpu: 150m
+        memory: 256Mi
+      limits:
+        cpu: 750m
+        memory: 512Mi
+
+  payment-service:
+    replicas: 1
+    image:
+      repository: cloudcart-payment-service
+      tag: "1.0.0"
+      pullPolicy: IfNotPresent
+    port: 8084
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    healthPath: /health
+    startupProbe:
+      periodSeconds: 3
+      timeoutSeconds: 2
+      failureThreshold: 20
+    readinessProbe:
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    livenessProbe:
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    config:
+      PORT: "8084"
+      NODE_ENV: production
+    secretEnv: {}
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+  notification-service:
+    replicas: 1
+    image:
+      repository: cloudcart-notification-service
+      tag: "1.0.0"
+      pullPolicy: IfNotPresent
+    port: 8085
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    healthPath: /health
+    startupProbe:
+      periodSeconds: 3
+      timeoutSeconds: 2
+      failureThreshold: 20
+    readinessProbe:
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    livenessProbe:
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    config:
+      PORT: "8085"
+      NODE_ENV: production
+    secretEnv: {}
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+databases:
+  user-db:
+    replicas: 1
+    database: cloudcart
+    username: cloudcart
+    secretName: user-db-secret
+    secretKey: POSTGRES_PASSWORD
+
+  product-db:
+    replicas: 1
+    database: cloudcart_products
+    username: cloudcart
+    secretName: product-db-secret
+    secretKey: POSTGRES_PASSWORD
+
+  order-db:
+    replicas: 1
+    database: cloudcart_orders
+    username: cloudcart
+    secretName: order-db-secret
+    secretKey: POSTGRES_PASSWORD
+
+postgres:
+  image:
+    repository: postgres
+    tag: "15.4"
+    pullPolicy: IfNotPresent
+  port: 5432
+  terminationGracePeriodSeconds: 30
+  persistence:
+    enabled: true
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 6
+  livenessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 6
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+  paths:
+    - path: /api/auth
+      pathType: Prefix
+      serviceName: user-service
+      servicePort: 8081
+    - path: /api/users
+      pathType: Prefix
+      serviceName: user-service
+      servicePort: 8081
+    - path: /api/products
+      pathType: Prefix
+      serviceName: product-service
+      servicePort: 8082
+    - path: /api/orders
+      pathType: Prefix
+      serviceName: order-service
+      servicePort: 8083
+    - path: /api/payments
+      pathType: Prefix
+      serviceName: payment-service
+      servicePort: 8084
+    - path: /api/notifications
+      pathType: Prefix
+      serviceName: notification-service
+      servicePort: 8085

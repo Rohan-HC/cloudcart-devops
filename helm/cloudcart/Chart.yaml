@@ -1,0 +1,17 @@
+﻿apiVersion: v2
+name: cloudcart
+description: Helm chart for the CloudCart microservices platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.30.0-0"
+
+maintainers:
+  - name: Rohan H C
+
+keywords:
+  - cloudcart
+  - microservices
+  - kubernetes
+  - spring-boot
+  - nodejs
