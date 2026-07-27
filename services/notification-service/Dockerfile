@@ -17,7 +17,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN npm ci --omit=dev `
+RUN npm ci --omit=dev \
     && npm cache clean --force
 
 COPY src ./src
