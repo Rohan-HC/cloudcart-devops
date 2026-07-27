@@ -1,0 +1,374 @@
+pipeline {
+    agent {
+        label 'docker'
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 45, unit: 'MINUTES')
+    }
+
+    parameters {
+        booleanParam(
+            name: 'DEPLOY_TO_MINIKUBE',
+            defaultValue: false,
+            description: 'Load images into Minikube and deploy the Helm chart'
+        )
+
+        string(
+            name: 'MINIKUBE_PROFILE',
+            defaultValue: 'minikube',
+            description: 'Minikube profile used for optional deployment'
+        )
+    }
+
+    environment {
+        MAVEN_IMAGE  = 'maven:3.9.9-eclipse-temurin-21'
+        NODE_IMAGE   = 'node:22-alpine'
+        KUBECTL_IMAGE = 'registry.k8s.io/kubectl:v1.36.1'
+        HELM_IMAGE   = 'alpine/helm:4.2.3'
+        TRIVY_IMAGE  = 'aquasec/trivy:0.70.0'
+
+        IMAGE_TAG = "${BUILD_NUMBER}"
+
+        USER_IMAGE         = "cloudcart-user-service"
+        PRODUCT_IMAGE      = "cloudcart-product-service"
+        ORDER_IMAGE        = "cloudcart-order-service"
+        PAYMENT_IMAGE      = "cloudcart-payment-service"
+        NOTIFICATION_IMAGE = "cloudcart-notification-service"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                deleteDir()
+                checkout scm
+
+                sh '''
+                    echo "Branch: ${BRANCH_NAME:-unknown}"
+                    echo "Commit: $(git rev-parse HEAD)"
+                    git status --short
+                '''
+            }
+        }
+
+        stage('Repository Validation') {
+            steps {
+                sh '''
+                    set -eu
+
+                    required_files="
+                    services/user-service/pom.xml
+                    services/product-service/pom.xml
+                    services/order-service/pom.xml
+                    services/payment-service/package-lock.json
+                    services/notification-service/package-lock.json
+                    helm/cloudcart/Chart.yaml
+                    helm/cloudcart/values.yaml
+                    k8s/overlays/dev/kustomization.yaml
+                    "
+
+                    for file in $required_files; do
+                        if [ ! -f "$file" ]; then
+                            echo "Required file is missing: $file"
+                            exit 1
+                        fi
+                    done
+
+                    echo "Repository structure is valid."
+                '''
+            }
+        }
+
+        stage('Service Tests') {
+            parallel {
+                stage('Java Tests') {
+                    steps {
+                        sh '''
+                            set -eu
+                            mkdir -p .m2
+
+                            for service in user-service product-service order-service; do
+                                echo "========================================"
+                                echo "Testing $service"
+                                echo "========================================"
+
+                                docker run --rm \
+                                  --volumes-from jenkins-cloudcart \
+                                  -v cloudcart-maven-cache:/root/.m2 \
+                                  -w "$WORKSPACE/services/$service" \
+                                  "$MAVEN_IMAGE" \
+                                  mvn -B clean test
+                            done
+                        '''
+                    }
+                }
+
+                stage('Node Tests') {
+                    steps {
+                        sh '''
+                            set -eu
+
+                            for service in payment-service notification-service; do
+                                echo "========================================"
+                                echo "Testing $service"
+                                echo "========================================"
+
+                                docker run --rm \
+                                  --volumes-from jenkins-cloudcart \
+                                  -w "$WORKSPACE/services/$service" \
+                                  "$NODE_IMAGE" \
+                                  sh -c "npm ci && npm test"
+                            done
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Kubernetes Validation') {
+            steps {
+                sh '''
+                    set -eu
+
+                    docker run --rm \
+                      --volumes-from jenkins-cloudcart \
+                      -w "$WORKSPACE" \
+                      "$KUBECTL_IMAGE" \
+                      kustomize k8s/overlays/dev \
+                      > kustomize-rendered.yaml
+
+                    test -s kustomize-rendered.yaml
+
+                    echo "Kustomize resources:"
+                    grep '^kind:' kustomize-rendered.yaml | sort | uniq -c
+                '''
+            }
+        }
+
+        stage('Helm Validation') {
+            steps {
+                sh '''
+                    set -eu
+
+                    docker run --rm \
+                      --volumes-from jenkins-cloudcart \
+                      -w "$WORKSPACE" \
+                      "$HELM_IMAGE" \
+                      lint helm/cloudcart
+
+                    docker run --rm \
+                      --volumes-from jenkins-cloudcart \
+                      -w "$WORKSPACE" \
+                      "$HELM_IMAGE" \
+                      template cloudcart helm/cloudcart \
+                        --namespace cloudcart \
+                      > helm-rendered.yaml
+
+                    test -s helm-rendered.yaml
+
+                    echo "Helm resources:"
+                    grep '^kind:' helm-rendered.yaml | sort | uniq -c
+                '''
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                sh '''
+                    set -eu
+
+                    docker build \
+                      --pull \
+                      -t "$USER_IMAGE:$IMAGE_TAG" \
+                      services/user-service
+
+                    docker build \
+                      --pull \
+                      -t "$PRODUCT_IMAGE:$IMAGE_TAG" \
+                      services/product-service
+
+                    docker build \
+                      --pull \
+                      -t "$ORDER_IMAGE:$IMAGE_TAG" \
+                      services/order-service
+
+                    docker build \
+                      --pull \
+                      -t "$PAYMENT_IMAGE:$IMAGE_TAG" \
+                      services/payment-service
+
+                    docker build \
+                      --pull \
+                      -t "$NOTIFICATION_IMAGE:$IMAGE_TAG" \
+                      services/notification-service
+                '''
+            }
+        }
+
+        stage('Trivy Security Scans') {
+            steps {
+                sh '''
+                    set -eu
+                    mkdir -p .trivy-cache
+
+                    for image in \
+                      "$USER_IMAGE:$IMAGE_TAG" \
+                      "$PRODUCT_IMAGE:$IMAGE_TAG" \
+                      "$ORDER_IMAGE:$IMAGE_TAG" \
+                      "$PAYMENT_IMAGE:$IMAGE_TAG" \
+                      "$NOTIFICATION_IMAGE:$IMAGE_TAG"
+                    do
+                        echo "========================================"
+                        echo "Scanning $image"
+                        echo "========================================"
+
+                        docker run --rm \
+                          -v /var/run/docker.sock:/var/run/docker.sock \
+                          -v cloudcart-trivy-cache:/root/.cache/ \
+                          "$TRIVY_IMAGE" \
+                          image \
+                          --exit-code 1 \
+                          --ignore-unfixed \
+                          --severity HIGH,CRITICAL \
+                          --scanners vuln \
+                          "$image"
+                    done
+                '''
+            }
+        }
+
+        stage('Deploy to Minikube') {
+            when {
+                expression {
+                    return params.DEPLOY_TO_MINIKUBE
+                }
+            }
+
+            steps {
+                sh '''
+                    set -eu
+
+                    command -v minikube >/dev/null 2>&1 || {
+                        echo "Minikube CLI is not available on this Jenkins agent."
+                        exit 1
+                    }
+
+                    command -v helm >/dev/null 2>&1 || {
+                        echo "Helm CLI is not available on this Jenkins agent."
+                        exit 1
+                    }
+
+                    command -v kubectl >/dev/null 2>&1 || {
+                        echo "kubectl is not available on this Jenkins agent."
+                        exit 1
+                    }
+
+                    minikube status -p "$MINIKUBE_PROFILE"
+
+                    for image in \
+                      "$USER_IMAGE:$IMAGE_TAG" \
+                      "$PRODUCT_IMAGE:$IMAGE_TAG" \
+                      "$ORDER_IMAGE:$IMAGE_TAG" \
+                      "$PAYMENT_IMAGE:$IMAGE_TAG" \
+                      "$NOTIFICATION_IMAGE:$IMAGE_TAG"
+                    do
+                        minikube image load \
+                          -p "$MINIKUBE_PROFILE" \
+                          "$image"
+                    done
+
+                    kubectl config use-context "$MINIKUBE_PROFILE"
+
+                    for secret in \
+                      user-db-secret \
+                      user-service-secret \
+                      product-db-secret \
+                      product-service-secret \
+                      order-db-secret \
+                      order-service-secret
+                    do
+                        kubectl get secret "$secret" \
+                          -n cloudcart >/dev/null
+                    done
+
+                    helm upgrade --install cloudcart helm/cloudcart \
+                      --namespace cloudcart \
+                      --create-namespace \
+                      --set applications.user-service.image.tag="$IMAGE_TAG" \
+                      --set applications.product-service.image.tag="$IMAGE_TAG" \
+                      --set applications.order-service.image.tag="$IMAGE_TAG" \
+                      --set applications.payment-service.image.tag="$IMAGE_TAG" \
+                      --set applications.notification-service.image.tag="$IMAGE_TAG" \
+                      --wait \
+                      --timeout 10m
+                '''
+            }
+        }
+
+        stage('Deployment Verification') {
+            when {
+                expression {
+                    return params.DEPLOY_TO_MINIKUBE
+                }
+            }
+
+            steps {
+                sh '''
+                    set -eu
+
+                    for deployment in \
+                      user-service \
+                      product-service \
+                      order-service \
+                      payment-service \
+                      notification-service
+                    do
+                        kubectl rollout status \
+                          "deployment/$deployment" \
+                          -n cloudcart \
+                          --timeout=180s
+                    done
+
+                    kubectl get pods,services,statefulsets,ingress,pvc \
+                      -n cloudcart
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            junit(
+                testResults: 'services/*/target/surefire-reports/*.xml',
+                allowEmptyResults: true
+            )
+
+            archiveArtifacts(
+                artifacts: 'helm-rendered.yaml,kustomize-rendered.yaml',
+                allowEmptyArchive: true
+            )
+
+            sh '''
+                rm -f helm-rendered.yaml kustomize-rendered.yaml
+            '''
+
+            cleanWs(
+                deleteDirs: true,
+                disableDeferredWipeout: true
+            )
+        }
+
+        success {
+            echo 'CloudCart Jenkins pipeline completed successfully.'
+        }
+
+        failure {
+            echo 'CloudCart Jenkins pipeline failed. Review the failed stage logs.'
+        }
+    }
+}
