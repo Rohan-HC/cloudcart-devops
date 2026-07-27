@@ -335,6 +335,71 @@ pipeline {
                               --namespace cloudcart \
                               >/dev/null
                         done
+                                                echo "========================================"
+                        echo "Checking Helm migration state"
+                        echo "========================================"
+
+                        if ! helm_cmd status cloudcart \
+                          --namespace cloudcart \
+                          >/dev/null 2>&1
+                        then
+                            echo "No existing Helm release found."
+                            echo "Removing Kustomize-managed resources before first Helm installation."
+
+                            kubectl_cmd delete deployments \
+                              user-service \
+                              product-service \
+                              order-service \
+                              payment-service \
+                              notification-service \
+                              --namespace cloudcart \
+                              --ignore-not-found=true \
+                              --wait=true
+
+                            kubectl_cmd delete statefulsets \
+                              user-db \
+                              product-db \
+                              order-db \
+                              --namespace cloudcart \
+                              --ignore-not-found=true \
+                              --wait=true
+
+                            kubectl_cmd delete services \
+                              user-db \
+                              product-db \
+                              order-db \
+                              user-service \
+                              product-service \
+                              order-service \
+                              payment-service \
+                              notification-service \
+                              --namespace cloudcart \
+                              --ignore-not-found=true \
+                              --wait=true
+
+                            kubectl_cmd delete configmaps \
+                              user-service-config \
+                              product-service-config \
+                              order-service-config \
+                              payment-service-config \
+                              notification-service-config \
+                              --namespace cloudcart \
+                              --ignore-not-found=true \
+                              --wait=true
+
+                            kubectl_cmd delete ingress \
+                              cloudcart-ingress \
+                              --namespace cloudcart \
+                              --ignore-not-found=true \
+                              --wait=true
+
+                            echo "Preserved Kubernetes secrets and persistent volume claims:"
+
+                            kubectl_cmd get secrets,pvc \
+                              --namespace cloudcart
+                        else
+                            echo "Existing Helm release found. Migration cleanup is not required."
+                        fi
 
                         echo "========================================"
                         echo "Deploying CloudCart with Helm"
@@ -345,13 +410,12 @@ pipeline {
                           helm/cloudcart \
                           --namespace cloudcart \
                           --create-namespace \
-                          --take-ownership \
                           --set-string applications.user-service.image.tag="$IMAGE_TAG" \
                           --set-string applications.product-service.image.tag="$IMAGE_TAG" \
                           --set-string applications.order-service.image.tag="$IMAGE_TAG" \
                           --set-string applications.payment-service.image.tag="$IMAGE_TAG" \
                           --set-string applications.notification-service.image.tag="$IMAGE_TAG" \
-                          --atomic \
+                          --rollback-on-failure \
                           --wait \
                           --timeout 10m
                     '''
