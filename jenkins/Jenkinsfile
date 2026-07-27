@@ -29,7 +29,7 @@ pipeline {
     environment {
         MAVEN_IMAGE  = 'maven:3.9.9-eclipse-temurin-21'
         NODE_IMAGE   = 'node:22-alpine'
-        KUBECTL_IMAGE = 'bitnami/kubectl:1.36.1'
+        KUBECTL_IMAGE = 'registry.k8s.io/kubectl:v1.36.1'
         HELM_IMAGE   = 'alpine/helm:4.2.3'
         TRIVY_IMAGE  = 'aquasec/trivy:0.70.0'
 
