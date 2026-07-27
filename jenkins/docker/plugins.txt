@@ -1,0 +1,11 @@
+workflow-aggregator
+git
+github
+github-branch-source
+pipeline-stage-view
+blueocean
+ansicolor
+ws-cleanup
+docker-workflow
+credentials-binding
+configuration-as-code
