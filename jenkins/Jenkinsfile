@@ -242,7 +242,7 @@ pipeline {
             }
         }
 
-        stage('Deploy to Minikube') {
+            stage('Deploy to Minikube') {
             when {
                 expression {
                     return params.DEPLOY_TO_MINIKUBE
@@ -250,63 +250,112 @@ pipeline {
             }
 
             steps {
-                sh '''
-                    set -eu
+                withCredentials([
+                    file(
+                        credentialsId: 'minikube-kubeconfig',
+                        variable: 'MINIKUBE_KUBECONFIG'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
 
-                    command -v minikube >/dev/null 2>&1 || {
-                        echo "Minikube CLI is not available on this Jenkins agent."
-                        exit 1
-                    }
+                        kubectl_cmd() {
+                            docker run --rm \
+                              --network "$MINIKUBE_PROFILE" \
+                              --volumes-from jenkins-cloudcart \
+                              -w "$WORKSPACE" \
+                              "$KUBECTL_IMAGE" \
+                              --kubeconfig "$MINIKUBE_KUBECONFIG" \
+                              "$@"
+                        }
 
-                    command -v helm >/dev/null 2>&1 || {
-                        echo "Helm CLI is not available on this Jenkins agent."
-                        exit 1
-                    }
+                        helm_cmd() {
+                            docker run --rm \
+                              --network "$MINIKUBE_PROFILE" \
+                              --volumes-from jenkins-cloudcart \
+                              -w "$WORKSPACE" \
+                              "$HELM_IMAGE" \
+                              --kubeconfig "$MINIKUBE_KUBECONFIG" \
+                              "$@"
+                        }
 
-                    command -v kubectl >/dev/null 2>&1 || {
-                        echo "kubectl is not available on this Jenkins agent."
-                        exit 1
-                    }
+                        echo "========================================"
+                        echo "Checking Minikube container"
+                        echo "========================================"
 
-                    minikube status -p "$MINIKUBE_PROFILE"
+                        test "$(docker inspect \
+                          --format='{{.State.Running}}' \
+                          "$MINIKUBE_PROFILE")" = "true"
 
-                    for image in \
-                      "$USER_IMAGE:$IMAGE_TAG" \
-                      "$PRODUCT_IMAGE:$IMAGE_TAG" \
-                      "$ORDER_IMAGE:$IMAGE_TAG" \
-                      "$PAYMENT_IMAGE:$IMAGE_TAG" \
-                      "$NOTIFICATION_IMAGE:$IMAGE_TAG"
-                    do
-                        minikube image load \
-                          -p "$MINIKUBE_PROFILE" \
-                          "$image"
-                    done
+                        kubectl_cmd get nodes -o wide
 
-                    kubectl config use-context "$MINIKUBE_PROFILE"
+                        echo "========================================"
+                        echo "Loading application images"
+                        echo "========================================"
 
-                    for secret in \
-                      user-db-secret \
-                      user-service-secret \
-                      product-db-secret \
-                      product-service-secret \
-                      order-db-secret \
-                      order-service-secret
-                    do
-                        kubectl get secret "$secret" \
-                          -n cloudcart >/dev/null
-                    done
+                        for image in \
+                          "$USER_IMAGE:$IMAGE_TAG" \
+                          "$PRODUCT_IMAGE:$IMAGE_TAG" \
+                          "$ORDER_IMAGE:$IMAGE_TAG" \
+                          "$PAYMENT_IMAGE:$IMAGE_TAG" \
+                          "$NOTIFICATION_IMAGE:$IMAGE_TAG"
+                        do
+                            echo "Loading $image into Minikube"
 
-                    helm upgrade --install cloudcart helm/cloudcart \
-                      --namespace cloudcart \
-                      --create-namespace \
-                      --set applications.user-service.image.tag="$IMAGE_TAG" \
-                      --set applications.product-service.image.tag="$IMAGE_TAG" \
-                      --set applications.order-service.image.tag="$IMAGE_TAG" \
-                      --set applications.payment-service.image.tag="$IMAGE_TAG" \
-                      --set applications.notification-service.image.tag="$IMAGE_TAG" \
-                      --wait \
-                      --timeout 10m
-                '''
+                            docker save "$image" |
+                              docker exec -i \
+                                "$MINIKUBE_PROFILE" \
+                                docker load
+
+                            docker exec \
+                              "$MINIKUBE_PROFILE" \
+                              docker image inspect \
+                              "$image" >/dev/null
+                        done
+
+                        kubectl_cmd get namespace cloudcart >/dev/null 2>&1 ||
+                          kubectl_cmd create namespace cloudcart
+
+                        echo "========================================"
+                        echo "Checking required Kubernetes secrets"
+                        echo "========================================"
+
+                        for secret in \
+                          user-db-secret \
+                          user-service-secret \
+                          product-db-secret \
+                          product-service-secret \
+                          order-db-secret \
+                          order-service-secret
+                        do
+                            echo "Checking secret: $secret"
+
+                            kubectl_cmd get secret \
+                              "$secret" \
+                              --namespace cloudcart \
+                              >/dev/null
+                        done
+
+                        echo "========================================"
+                        echo "Deploying CloudCart with Helm"
+                        echo "========================================"
+
+                        helm_cmd upgrade --install \
+                          cloudcart \
+                          helm/cloudcart \
+                          --namespace cloudcart \
+                          --create-namespace \
+                          --take-ownership \
+                          --set-string applications.user-service.image.tag="$IMAGE_TAG" \
+                          --set-string applications.product-service.image.tag="$IMAGE_TAG" \
+                          --set-string applications.order-service.image.tag="$IMAGE_TAG" \
+                          --set-string applications.payment-service.image.tag="$IMAGE_TAG" \
+                          --set-string applications.notification-service.image.tag="$IMAGE_TAG" \
+                          --atomic \
+                          --wait \
+                          --timeout 10m
+                    '''
+                }
             }
         }
 
@@ -318,28 +367,69 @@ pipeline {
             }
 
             steps {
-                sh '''
-                    set -eu
+                withCredentials([
+                    file(
+                        credentialsId: 'minikube-kubeconfig',
+                        variable: 'MINIKUBE_KUBECONFIG'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
 
-                    for deployment in \
-                      user-service \
-                      product-service \
-                      order-service \
-                      payment-service \
-                      notification-service
-                    do
-                        kubectl rollout status \
-                          "deployment/$deployment" \
-                          -n cloudcart \
-                          --timeout=180s
-                    done
+                        kubectl_cmd() {
+                            docker run --rm \
+                              --network "$MINIKUBE_PROFILE" \
+                              --volumes-from jenkins-cloudcart \
+                              -w "$WORKSPACE" \
+                              "$KUBECTL_IMAGE" \
+                              --kubeconfig "$MINIKUBE_KUBECONFIG" \
+                              "$@"
+                        }
 
-                    kubectl get pods,services,statefulsets,ingress,pvc \
-                      -n cloudcart
-                '''
+                        echo "========================================"
+                        echo "Waiting for all CloudCart pods"
+                        echo "========================================"
+
+                        kubectl_cmd wait \
+                          --for=condition=Ready \
+                          pod \
+                          --all \
+                          --namespace cloudcart \
+                          --timeout=300s
+
+                        for deployment in \
+                          user-service \
+                          product-service \
+                          order-service \
+                          payment-service \
+                          notification-service
+                        do
+                            kubectl_cmd rollout status \
+                              "deployment/$deployment" \
+                              --namespace cloudcart \
+                              --timeout=180s
+                        done
+
+                        echo "========================================"
+                        echo "CloudCart deployment state"
+                        echo "========================================"
+
+                        kubectl_cmd get \
+                          pods,services,statefulsets,ingress,pvc \
+                          --namespace cloudcart \
+                          -o wide
+
+                        echo "========================================"
+                        echo "Deployed application images"
+                        echo "========================================"
+
+                        kubectl_cmd get deployments \
+                          --namespace cloudcart \
+                          -o custom-columns='DEPLOYMENT:.metadata.name,IMAGE:.spec.template.spec.containers[*].image'
+                    '''
+                }
             }
         }
-    }
 
     post {
         always {
