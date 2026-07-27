@@ -1,0 +1,87 @@
+﻿{{- $root := . }}
+{{- range $name, $application := .Values.applications }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "cloudcart.namespace" $root }}
+  labels:
+    {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 4 }}
+spec:
+  replicas: {{ $application.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $application.runAsUser }}
+        runAsGroup: {{ $application.runAsGroup }}
+        fsGroup: {{ $application.fsGroup }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $application.image.repository }}:{{ $application.image.tag }}"
+          imagePullPolicy: {{ $application.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $application.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}-config
+          {{- with $application.secretEnv }}
+          env:
+            {{- range $envName, $secret := . }}
+            - name: {{ $envName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret.secretName }}
+                  key: {{ $secret.key }}
+            {{- end }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: {{ $application.healthPath }}
+              port: http
+            periodSeconds: {{ $application.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ $application.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ $application.startupProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ $application.healthPath }}
+              port: http
+            periodSeconds: {{ $application.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ $application.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ $application.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ $application.healthPath }}
+              port: http
+            periodSeconds: {{ $application.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ $application.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ $application.livenessProbe.failureThreshold }}
+          resources:
+            {{- toYaml $application.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: temporary-files
+              mountPath: /tmp
+      volumes:
+        - name: temporary-files
+          emptyDir: {}
+{{- end }}

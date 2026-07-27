@@ -2,19 +2,14 @@
 {{- range $name, $application := .Values.applications }}
 ---
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: {{ $name }}
+  name: {{ $name }}-config
   namespace: {{ include "cloudcart.namespace" $root }}
   labels:
     {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 4 }}
-spec:
-  type: ClusterIP
-  selector:
-    {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 4 }}
-  ports:
-    - name: http
-      port: {{ $application.port }}
-      targetPort: http
-      protocol: TCP
+data:
+  {{- range $key, $value := $application.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
 {{- end }}

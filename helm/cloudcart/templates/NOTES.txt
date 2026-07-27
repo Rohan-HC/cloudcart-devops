@@ -1,0 +1,30 @@
+CloudCart has been installed.
+
+Release: {{ .Release.Name }}
+Namespace: {{ include "cloudcart.namespace" . }}
+
+This chart references existing Kubernetes Secrets for database passwords and the JWT secret.
+Create them before installing into a new namespace:
+
+  kubectl create secret generic user-db-secret -n {{ include "cloudcart.namespace" . }} --from-literal=POSTGRES_PASSWORD=<password>
+  kubectl create secret generic user-service-secret -n {{ include "cloudcart.namespace" . }} --from-literal=DB_PASSWORD=<password> --from-literal=JWT_SECRET=<jwt-secret>
+  kubectl create secret generic product-db-secret -n {{ include "cloudcart.namespace" . }} --from-literal=POSTGRES_PASSWORD=<password>
+  kubectl create secret generic product-service-secret -n {{ include "cloudcart.namespace" . }} --from-literal=DB_PASSWORD=<password>
+  kubectl create secret generic order-db-secret -n {{ include "cloudcart.namespace" . }} --from-literal=POSTGRES_PASSWORD=<password>
+  kubectl create secret generic order-service-secret -n {{ include "cloudcart.namespace" . }} --from-literal=DB_PASSWORD=<password>
+
+Useful checks:
+
+  helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+  kubectl get pods -n {{ include "cloudcart.namespace" . }}
+  kubectl get svc -n {{ include "cloudcart.namespace" . }}
+
+{{- if .Values.ingress.enabled }}
+Ingress is enabled with class {{ .Values.ingress.className | quote }}.
+
+For a local nginx ingress controller, forward port 80 and test the API routes:
+
+  kubectl port-forward service/ingress-nginx-controller 18090:80 -n ingress-nginx
+  curl.exe http://localhost:18090/api/products
+  curl.exe http://localhost:18090/api/payments
+{{- end }}

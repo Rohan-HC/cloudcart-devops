@@ -1,5 +1,5 @@
 ﻿{{- $root := . }}
-{{- range $name, $application := .Values.applications }}
+{{- range $name, $database := .Values.databases }}
 ---
 apiVersion: v1
 kind: Service
@@ -9,12 +9,12 @@ metadata:
   labels:
     {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 4 }}
 spec:
-  type: ClusterIP
+  clusterIP: None
   selector:
     {{- include "cloudcart.selectorLabels" (dict "root" $root "component" $name) | nindent 4 }}
   ports:
-    - name: http
-      port: {{ $application.port }}
-      targetPort: http
+    - name: postgres
+      port: {{ $root.Values.postgres.port }}
+      targetPort: postgres
       protocol: TCP
 {{- end }}
