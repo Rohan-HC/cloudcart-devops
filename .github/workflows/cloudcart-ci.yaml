@@ -1,0 +1,193 @@
+name: CloudCart CI
+
+on:
+  push:
+    branches:
+      - main
+      - "devops/**"
+
+  pull_request:
+    branches:
+      - main
+      - devops/kubernetes-local
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudcart-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java-tests:
+    name: Java Tests - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: user-service
+            path: services/user-service
+
+          - service: product-service
+            path: services/product-service
+
+          - service: order-service
+            path: services/order-service
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: ${{ matrix.path }}/pom.xml
+
+      - name: Run Maven tests
+        run: >
+          mvn
+          --batch-mode
+          --no-transfer-progress
+          -f "${{ matrix.path }}/pom.xml"
+          clean
+          test
+
+  node-tests:
+    name: Node Tests - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: payment-service
+            path: services/payment-service
+
+          - service: notification-service
+            path: services/notification-service
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.path }}
+        run: npm ci
+
+      - name: Run tests
+        working-directory: ${{ matrix.path }}
+        run: npm test
+
+  kustomize-validation:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v5
+        with:
+          version: latest
+
+      - name: Render development overlay
+        run: |
+          set -euo pipefail
+
+          kubectl kustomize k8s/overlays/dev > rendered-manifests.yaml
+
+          test -s rendered-manifests.yaml
+
+      - name: Verify expected resources
+        run: |
+          set -euo pipefail
+
+          grep -q "kind: Namespace" rendered-manifests.yaml
+          grep -q "kind: ConfigMap" rendered-manifests.yaml
+          grep -q "kind: Service" rendered-manifests.yaml
+          grep -q "kind: Deployment" rendered-manifests.yaml
+          grep -q "kind: StatefulSet" rendered-manifests.yaml
+          grep -q "kind: Ingress" rendered-manifests.yaml
+
+      - name: Show rendered resource totals
+        run: |
+          awk '/^kind:/ { count[$2]++ } END {
+            for (kind in count) {
+              print kind ": " count[kind]
+            }
+          }' rendered-manifests.yaml | sort
+
+  docker-security:
+    name: Docker & Trivy - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: user-service
+            context: services/user-service
+            image: cloudcart-user-service
+
+          - service: product-service
+            context: services/product-service
+            image: cloudcart-product-service
+
+          - service: order-service
+            context: services/order-service
+            image: cloudcart-order-service
+
+          - service: payment-service
+            context: services/payment-service
+            image: cloudcart-payment-service
+
+          - service: notification-service
+            context: services/notification-service
+            image: cloudcart-notification-service
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          push: false
+          load: true
+          tags: local/${{ matrix.image }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: local/${{ matrix.image }}:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL

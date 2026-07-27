@@ -7,13 +7,13 @@ COPY src ./src
 
 RUN mvn -B -ntp clean package 
 
-FROM eclipse-temurin:21-jre AS runtime
+FROM gcr.io/distroless/java21-debian13:nonroot AS runtime
 COPY --from=build \
     /workspace/target/user-service-1.0.0.jar \
      /app/app.jar
 
-USER 10001:10001
 
-EXPOSE 8082
+
+EXPOSE 8081
 
 ENTRYPOINT ["java","-jar","/app/app.jar"]
