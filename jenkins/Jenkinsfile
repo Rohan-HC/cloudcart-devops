@@ -242,7 +242,7 @@ pipeline {
             }
         }
 
-            stage('Deploy to Minikube') {
+        stage('Deploy to Minikube') {
             when {
                 expression {
                     return params.DEPLOY_TO_MINIKUBE
@@ -430,6 +430,7 @@ pipeline {
                 }
             }
         }
+    }
 
     post {
         always {
