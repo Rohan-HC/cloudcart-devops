@@ -11,4 +11,5 @@ data:
   DB_USERNAME: cloudcart
   PRODUCT_SERVICE_URL: http://product-service:8082
   JPA_DDL_AUTO: update
+  MANAGEMENT_HEALTH_DISKSPACE_ENABLED: "false"
   SERVER_PORT: "8083"
