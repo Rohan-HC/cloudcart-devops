@@ -410,6 +410,7 @@ pipeline {
                           helm/cloudcart \
                           --namespace cloudcart \
                           --create-namespace \
+                          --set namespace.create=false \
                           --set-string applications.user-service.image.tag="$IMAGE_TAG" \
                           --set-string applications.product-service.image.tag="$IMAGE_TAG" \
                           --set-string applications.order-service.image.tag="$IMAGE_TAG" \
