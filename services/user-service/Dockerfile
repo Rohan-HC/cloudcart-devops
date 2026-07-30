@@ -17,6 +17,10 @@ COPY --from=build \
 
 
 
+USER 10001:10001
+
+USER 10001:10001
+
 EXPOSE 8081
 
 ENTRYPOINT ["java","-jar","/app/app.jar"]
