@@ -232,6 +232,8 @@ pipeline {
                           -v cloudcart-trivy-cache:/root/.cache/ \
                           "$TRIVY_IMAGE" \
                           image \
+                          --timeout 10m \
+                          --skip-version-check \
                           --exit-code 1 \
                           --ignore-unfixed \
                           --severity HIGH,CRITICAL \
