@@ -5,7 +5,10 @@ RUN mvn -B -ntp dependency:go-offline
 COPY src ./src
 RUN mvn -B -ntp clean package
 
-FROM gcr.io/distroless/java21-debian13:nonroot AS runtime
+FROM eclipse-temurin:21-jre-alpine AS runtime
+
+USER root
+RUN apk upgrade --no-cache
 
 WORKDIR /app
 COPY --from=build /workspace/target/order-service-1.0.0.jar /app/app.jar
